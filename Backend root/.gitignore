@@ -13,6 +13,11 @@ venv/
 env/
 .venv/
 ENV/
+# Environment variables
+.env
+.env.local
+.env.production
+.env.ngrok
 
 # IDE
 .vscode/

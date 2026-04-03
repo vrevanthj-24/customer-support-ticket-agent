@@ -15,6 +15,7 @@ class StatusEnum(str, enum.Enum):
     open = "open"
     in_progress = "in-progress"
     resolved = "resolved"
+    closed = "closed"
 
 class SenderEnum(str, enum.Enum):
     user = "user"
@@ -26,7 +27,20 @@ class AgentStatus(str, enum.Enum):
     inactive = "inactive"
 
 
-# USERS TABLE
+# ==================== Department Table (NEW) ====================
+class Department(Base):
+    __tablename__ = "departments"
+    
+    department_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(Text)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    
+    agents = relationship("Agent", back_populates="department")
+    categories = relationship("Category", back_populates="department")
+
+
+# ==================== Users Table ====================
 class User(Base):
     __tablename__ = "users"
 
@@ -35,27 +49,30 @@ class User(Base):
     email = Column(String(100), unique=True)
     phone = Column(String(15))
     hashed_password = Column(String(255), nullable=True)
-    is_active = Column(Boolean, default=True)  # Add this
-    is_admin = Column(Boolean, default=False)  # Add this
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
     
     tickets = relationship("Ticket", back_populates="user")
 
 
-# CATEGORIES
+# ==================== Categories Table ====================
 class Category(Base):
     __tablename__ = "categories"
 
     category_id = Column(Integer, primary_key=True, index=True)
-    category_name = Column(String(100))
+    category_name = Column(String(100), unique=True, nullable=False)
     description = Column(Text)
+    department_id = Column(Integer, ForeignKey("departments.department_id"), nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
     
+    department = relationship("Department", back_populates="categories")
     subcategories = relationship("SubCategory", back_populates="category")
     tickets = relationship("Ticket", back_populates="category")
     faqs = relationship("FAQ", back_populates="category")
 
 
-# SUBCATEGORIES
+# ==================== SubCategories Table ====================
 class SubCategory(Base):
     __tablename__ = "subcategories"
 
@@ -68,20 +85,24 @@ class SubCategory(Base):
     tickets = relationship("Ticket", back_populates="subcategory")
 
 
-# AGENTS
+# ==================== Agents Table ====================
 class Agent(Base):
     __tablename__ = "agents"
 
     agent_id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100))
-    email = Column(String(100), unique=True)
-    department_id = Column(Integer)
-    status = Column(Enum(AgentStatus))
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True, nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.department_id"), nullable=True)
+    expertise_categories = Column(Text, nullable=True)  # Comma-separated category names
+    status = Column(Enum(AgentStatus), default=AgentStatus.active)
+    max_concurrent_tickets = Column(Integer, default=5)
+    created_at = Column(TIMESTAMP, server_default=func.now())
     
+    department = relationship("Department", back_populates="agents")
     tickets = relationship("Ticket", back_populates="assigned_agent")
 
 
-# TICKETS
+# ==================== Tickets Table ====================
 class Ticket(Base):
     __tablename__ = "tickets"
 
@@ -96,6 +117,8 @@ class Ticket(Base):
     assigned_agent_id = Column(Integer, ForeignKey("agents.agent_id"), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, onupdate=func.now())
+    resolved_at = Column(TIMESTAMP, nullable=True)
+    resolution_time_minutes = Column(Integer, nullable=True)
     
     user = relationship("User", back_populates="tickets")
     category = relationship("Category", back_populates="tickets")
@@ -105,7 +128,7 @@ class Ticket(Base):
     faq_entry = relationship("FAQ", back_populates="ticket")
 
 
-# TICKET REPLIES
+# ==================== Ticket Replies Table ====================
 class TicketReply(Base):
     __tablename__ = "ticket_replies"
 
@@ -118,7 +141,7 @@ class TicketReply(Base):
     ticket = relationship("Ticket", back_populates="replies")
 
 
-# FAQ
+# ==================== FAQ Table ====================
 class FAQ(Base):
     __tablename__ = "faqs"
 
