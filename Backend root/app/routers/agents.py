@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -36,7 +36,14 @@ def get_agents(
             agent.department_name = None
     
     return agents
-
+@router.delete("/{agent_id}")
+def delete_agent(agent_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_admin_user)):
+    agent = db.query(models.Agent).filter(models.Agent.agent_id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    db.delete(agent)
+    db.commit()
+    return {"message": "Agent deleted"}
 
 @router.post("/", response_model=schemas.Agent)
 def create_agent(
