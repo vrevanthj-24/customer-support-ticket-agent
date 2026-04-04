@@ -13,18 +13,24 @@ app = FastAPI(
     description="AI-powered ticket management system"
 )
 
-# Get frontend URL from environment variable or use default
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://customer-support-ticket-agent.vercel.app")
+# Get allowed origins from environment variable (comma-separated)
+# Example: "https://customer-support-ticket-agent.vercel.app,https://customer-support-ticket-agent-git-main-vrevanthj-24s-projects.vercel.app"
+ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS_LIST = [origin.strip() for origin in ALLOWED_ORIGINS_ENV.split(",") if origin.strip()]
 
-# CORS configuration - Allow your Vercel frontend
+# Default allowed origins for local development
+DEFAULT_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
+# Combine default origins with environment variable origins
+ALLOWED_ORIGINS = DEFAULT_ORIGINS + ALLOWED_ORIGINS_LIST
+
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",                          # Local development
-        "http://localhost:3000",                          # Alternative local
-        "https://customer-support-ticket-agent.vercel.app", # Your Vercel frontend
-        FRONTEND_URL,                                      # From environment variable
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
