@@ -68,6 +68,7 @@ export const agentAPI = {
   getAll: () => api.get('/agents/'),
   create: (data) => api.post('/agents/', data),
   updateStatus: (id, status) => api.put(`/agents/${id}/status?status=${status}`),
+  delete: (id) => api.delete(`/agents/${id}`),
   getQueue: () => api.get('/agents/queue'),
   assignTicket: (ticketId, agentId) => api.put(`/agents/assign/${ticketId}/${agentId}`),
   suggestReply: (ticketId) => api.post(`/agents/suggest-reply/${ticketId}`),
