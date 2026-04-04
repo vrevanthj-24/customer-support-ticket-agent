@@ -1,18 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { agentAPI } from '../../services/api';
 import toast from 'react-hot-toast';
-import { FiPlus, FiToggleLeft, FiToggleRight, FiUsers, FiMail, FiTag } from 'react-icons/fi';
+import { FiPlus, FiToggleLeft, FiToggleRight, FiUsers, FiMail, FiTag, FiTrash2 } from 'react-icons/fi';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export default function AdminAgents() {
   const [agents, setAgents] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', department_id: 1 });
+  const [form, setForm] = useState({ name: '', email: '', department_id: '' });
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null); // agent to delete
 
-  useEffect(() => { 
-    fetchAgents(); 
+  useEffect(() => {
+    fetchAgents();
     fetchDepartments();
   }, []);
 
@@ -20,23 +24,30 @@ export default function AdminAgents() {
     try {
       const { data } = await agentAPI.getAll();
       setAgents(data);
-    } catch { 
-      toast.error('Failed to load agents'); 
+    } catch {
+      toast.error('Failed to load agents');
     }
     setLoading(false);
   };
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/categories/departments`, {
+      const response = await fetch(`${API_URL}/categories/departments`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
       const data = await response.json();
-      setDepartments(data);
+      if (Array.isArray(data)) {
+        setDepartments(data);
+        // Set default department_id to first dept
+        if (data.length > 0) {
+          setForm(p => ({ ...p, department_id: data[0].department_id }));
+        }
+      }
     } catch (error) {
       console.error('Failed to fetch departments:', error);
+      toast.error('Failed to load departments');
     }
   };
 
@@ -50,19 +61,32 @@ export default function AdminAgents() {
     e.preventDefault();
     setCreating(true);
     try {
-      await agentAPI.create({ 
-        name: form.name, 
-        email: form.email, 
-        department_id: parseInt(form.department_id) 
+      await agentAPI.create({
+        name: form.name,
+        email: form.email,
+        department_id: parseInt(form.department_id)
       });
-      toast.success('Agent created');
+      toast.success('Agent created successfully');
       setShowForm(false);
-      setForm({ name: '', email: '', department_id: 1 });
+      setForm({ name: '', email: '', department_id: departments[0]?.department_id || '' });
       fetchAgents();
-    } catch (err) { 
-      toast.error(err.response?.data?.detail || 'Failed to create agent'); 
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create agent');
     }
     setCreating(false);
+  };
+
+  const deleteAgent = async (agent) => {
+    setDeletingId(agent.agent_id);
+    try {
+      await agentAPI.delete(agent.agent_id);
+      toast.success(`Agent "${agent.name}" deleted`);
+      setConfirmDelete(null);
+      fetchAgents();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete agent');
+    }
+    setDeletingId(null);
   };
 
   const toggleStatus = async (agent) => {
@@ -71,8 +95,8 @@ export default function AdminAgents() {
       await agentAPI.updateStatus(agent.agent_id, newStatus);
       toast.success(`Agent ${newStatus}`);
       fetchAgents();
-    } catch { 
-      toast.error('Failed to update status'); 
+    } catch {
+      toast.error('Failed to update status');
     }
   };
 
@@ -94,12 +118,12 @@ export default function AdminAgents() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'Total Agents', value: agents.length, color: 'bg-blue-50 text-blue-700' },
-          { label: 'Active', value: activeCount, color: 'bg-green-50 text-green-700' },
-          { label: 'Inactive', value: agents.length - activeCount, color: 'bg-slate-50 text-slate-600' },
+          { label: 'Total Agents', value: agents.length, color: 'text-blue-700' },
+          { label: 'Active', value: activeCount, color: 'text-green-700' },
+          { label: 'Inactive', value: agents.length - activeCount, color: 'text-slate-600' },
         ].map((s, i) => (
           <div key={i} className="bg-white rounded-2xl border border-slate-200 p-4 text-center">
-            <div className={`text-2xl font-bold ${s.color.split(' ')[1]}`}>{s.value}</div>
+            <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
             <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
           </div>
         ))}
@@ -129,11 +153,21 @@ export default function AdminAgents() {
                   </div>
                 </div>
               </div>
-              <button onClick={() => toggleStatus(a)} className="transition-colors">
-                {a.status === 'active'
-                  ? <FiToggleRight className="w-7 h-7 text-green-500 hover:text-green-600" />
-                  : <FiToggleLeft className="w-7 h-7 text-slate-300 hover:text-slate-400" />}
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Toggle Status */}
+                <button onClick={() => toggleStatus(a)} className="transition-colors">
+                  {a.status === 'active'
+                    ? <FiToggleRight className="w-7 h-7 text-green-500 hover:text-green-600" />
+                    : <FiToggleLeft className="w-7 h-7 text-slate-300 hover:text-slate-400" />}
+                </button>
+                {/* Delete Button */}
+                <button
+                  onClick={() => setConfirmDelete(a)}
+                  className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-all"
+                  title="Delete agent">
+                  <FiTrash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <FiMail className="w-3.5 h-3.5" />
@@ -171,6 +205,9 @@ export default function AdminAgents() {
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Department</label>
                 <select value={form.department_id} onChange={e => setForm(p => ({ ...p, department_id: e.target.value }))}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  {departments.length === 0 && (
+                    <option value="">No departments found</option>
+                  )}
                   {departments.map(dept => (
                     <option key={dept.department_id} value={dept.department_id}>
                       {dept.name}
@@ -181,12 +218,44 @@ export default function AdminAgents() {
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)}
                   className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
-                <button type="submit" disabled={creating}
+                <button type="submit" disabled={creating || departments.length === 0}
                   className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold">
                   {creating ? 'Creating...' : 'Create Agent'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+                <FiTrash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800">Delete Agent</h3>
+                <p className="text-xs text-slate-500">This action cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 mb-5">
+              Are you sure you want to delete <strong>{confirmDelete.name}</strong>?
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteAgent(confirmDelete)}
+                disabled={deletingId === confirmDelete.agent_id}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-semibold">
+                {deletingId === confirmDelete.agent_id ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
