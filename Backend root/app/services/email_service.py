@@ -21,8 +21,7 @@ try:
 except ImportError:
     pass
 
-# ── Resend SDK setup ────────────────────────────────────────────────────────
-import resend
+from mailersend import emails as mailersend_emails
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,33 +29,45 @@ logger = logging.getLogger(__name__)
 
 class EmailService:
     def __init__(self):
-        self.api_key = os.environ.get("RESEND_API_KEY", "").strip()
-        self.from_email = os.environ.get("FROM_EMAIL", "onboarding@resend.dev").strip()
+        self.api_key = os.environ.get("MAILERSEND_API_KEY", "").strip()
+        self.from_email = os.environ.get("FROM_EMAIL", "").strip()
         self.from_name = os.environ.get("FROM_NAME", "Customer Support Team")
         self.frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 
         if self.api_key:
-            resend.api_key = self.api_key
-            logger.info(f"[EmailService] ✅ Resend API key SET | from='{self.from_email}'")
+            logger.info(f"[EmailService] ✅ MailerSend API key SET | from='{self.from_email}'")
         else:
-            logger.error("[EmailService] ❌ RESEND_API_KEY is not set! Emails will NOT be sent.")
+            logger.error("[EmailService] ❌ MAILERSEND_API_KEY is not set! Emails will NOT be sent.")
 
-    def _send_email(self, to_email: str, subject: str, html_content: str) -> bool:
+    def _send_email(self, to_email: str, to_name: str, subject: str, html_content: str) -> bool:
         if not self.api_key:
-            logger.error("❌ Email NOT sent — RESEND_API_KEY missing. Add it in Render environment variables.")
+            logger.error("❌ Email NOT sent — MAILERSEND_API_KEY missing.")
+            return False
+        if not self.from_email:
+            logger.error("❌ Email NOT sent — FROM_EMAIL missing.")
             return False
 
         try:
-            response = resend.Emails.send({
-                "from": f"{self.from_name} <{self.from_email}>",
-                "to": [to_email],
-                "subject": subject,
-                "html": html_content,
-            })
-            logger.info(f"✅ Email sent via Resend → {to_email} | {subject} | id={response.get('id', 'unknown')}")
+            mailer = mailersend_emails.NewEmail(self.api_key)
+            mail_body = {}
+
+            mail_from = {
+                "name": self.from_name,
+                "email": self.from_email,
+            }
+            recipients = [{"name": to_name, "email": to_email}]
+
+            mailer.set_mail_from(mail_from, mail_body)
+            mailer.set_mail_to(recipients, mail_body)
+            mailer.set_subject(subject, mail_body)
+            mailer.set_html_content(html_content, mail_body)
+            mailer.set_plaintext_content("Please view this email in an HTML-compatible email client.", mail_body)
+
+            response = mailer.send(mail_body)
+            logger.info(f"✅ Email sent via MailerSend → {to_email} | {subject} | response={response}")
             return True
         except Exception as e:
-            logger.error(f"❌ Resend error: {type(e).__name__}: {e}")
+            logger.error(f"❌ MailerSend error: {type(e).__name__}: {e}")
             return False
 
     def send_ticket_confirmation(self, ticket: Dict[str, Any], user_email: str) -> bool:
@@ -94,7 +105,7 @@ body{{font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padd
 <a href="{self.frontend_url}/customer/tickets/{ticket.get('ticket_id')}" class="btn">View Your Ticket →</a>
 </div></body></html>"""
 
-        return self._send_email(user_email, f"✅ Ticket #{ticket.get('ticket_id')} Created!", html)
+        return self._send_email(user_email, ticket.get('name', 'Customer'), f"✅ Ticket #{ticket.get('ticket_id')} Created!", html)
 
     def send_ticket_resolution(self, ticket: Dict[str, Any], user_email: str, resolution: str) -> bool:
         html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -119,7 +130,7 @@ body{{font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padd
 <p style="margin-top:24px">Thank you for using SupportAI! 😊</p>
 </div></body></html>"""
 
-        return self._send_email(user_email, f"🎉 Ticket #{ticket.get('ticket_id')} Resolved — Thank you!", html)
+        return self._send_email(user_email, ticket.get('name', 'Customer'), f"🎉 Ticket #{ticket.get('ticket_id')} Resolved!", html)
 
     def send_ticket_update(self, ticket: Dict[str, Any], user_email: str, update_message: str) -> bool:
         html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -137,7 +148,7 @@ body{{font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padd
 <a href="{self.frontend_url}/customer/tickets/{ticket.get('ticket_id')}" class="btn">View & Reply →</a>
 </div></body></html>"""
 
-        return self._send_email(user_email, f"💬 New reply on Ticket #{ticket.get('ticket_id')}", html)
+        return self._send_email(user_email, ticket.get('name', 'Customer'), f"💬 New reply on Ticket #{ticket.get('ticket_id')}", html)
 
     def send_agent_assignment(self, ticket: Dict[str, Any], agent: Dict[str, Any], agent_email: str) -> bool:
         html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -149,7 +160,7 @@ body{{font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padd
 </style></head><body>
 <div class="hdr"><h1>📋 New Ticket Assigned</h1></div>
 <div class="body">
-<h2>Hello {agent.get('name')},</h2>
+<h2>Hello {agent.get('name', 'Agent')},</h2>
 <div class="box">
 <p><strong>Ticket ID:</strong> #{ticket.get('ticket_id')}</p>
 <p><strong>Title:</strong> {ticket.get('title')}</p>
@@ -158,7 +169,7 @@ body{{font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padd
 <a href="{self.frontend_url}/admin/tickets/{ticket.get('ticket_id')}" class="btn">View Ticket →</a>
 </div></body></html>"""
 
-        return self._send_email(agent_email, f"📋 Ticket assigned: #{ticket.get('ticket_id')}", html)
+        return self._send_email(agent_email, agent.get('name', 'Agent'), f"📋 Ticket assigned: #{ticket.get('ticket_id')}", html)
 
     def send_welcome_email(self, user_name: str, user_email: str) -> bool:
         html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -174,7 +185,7 @@ body{{font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padd
 <a href="{self.frontend_url}/customer/dashboard" class="btn">Get Started →</a>
 </div></body></html>"""
 
-        return self._send_email(user_email, "👋 Welcome to SupportAI!", html)
+        return self._send_email(user_email, user_name, "👋 Welcome to SupportAI!", html)
 
     def send_password_reset(self, user_name: str, user_email: str, reset_link: str) -> bool:
         html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -203,7 +214,7 @@ body{{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;ma
 <p>This is an automated message. Please do not reply to this email.</p>
 </div></body></html>"""
 
-        return self._send_email(user_email, "🔐 Reset Your SupportAI Password", html)
+        return self._send_email(user_email, user_name, "🔐 Reset Your SupportAI Password", html)
 
 
 email_service = EmailService()
