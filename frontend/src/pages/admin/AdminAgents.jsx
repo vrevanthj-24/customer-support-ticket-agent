@@ -28,7 +28,7 @@ export default function AdminAgents() {
 
   const fetchDepartments = async () => {
     try {
-      const response = await fetch('http://localhost:8000/categories/departments', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/categories/departments`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
