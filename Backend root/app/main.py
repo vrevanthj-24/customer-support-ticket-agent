@@ -24,8 +24,15 @@ DEFAULT_ORIGINS = [
     "http://localhost:3000",
 ]
 
-# Combine default origins with environment variable origins
-ALLOWED_ORIGINS = DEFAULT_ORIGINS + ALLOWED_ORIGINS_LIST
+# Add common Vercel URLs
+VERCEL_URLS = [
+    "https://customer-support-ticket-agent.vercel.app",
+    "https://customer-support-ticket-agent-git-main-vrevanthj-24s-projects.vercel.app",
+    "https://*.vercel.app",  # Wildcard for all Vercel subdomains
+]
+
+# Combine all origins
+ALLOWED_ORIGINS = DEFAULT_ORIGINS + VERCEL_URLS + ALLOWED_ORIGINS_LIST
 
 # CORS configuration
 app.add_middleware(
